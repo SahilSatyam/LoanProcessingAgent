@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoanAgent Pro - AI-Powered Loan Processing</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="header__content">
+                <div class="header__brand">
+                    <h1 class="header__title">LoanAgent Pro</h1>
+                    <p class="header__subtitle">AI-Powered Loan Processing</p>
+                </div>
+                <div class="header__status">
+                    <span class="status status--info" id="connection-status">Connected</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <div class="app-layout">
+                <!-- Chat Interface -->
+                <div class="chat-section">
+                    <div class="chat-header">
+                        <h2>Loan Processing Agent</h2>
+                        <p>Powered by DeepSeek AI</p>
+                    </div>
+                    
+                    <div class="chat-container" id="chat-container">
+                        <div class="chat-messages" id="chat-messages">
+                            <!-- Messages will be dynamically added here -->
+                        </div>
+                        
+                        <div class="typing-indicator hidden" id="typing-indicator">
+                            <div class="typing-dots">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                            <span class="typing-text">Agent is typing...</span>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-input-section">
+                        <div class="file-upload-area" id="file-upload-area">
+                            <input type="file" id="file-input" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+                            <button class="btn btn--secondary btn--sm" id="upload-btn">
+                                📎 Upload Documents
+                            </button>
+                        </div>
+                        
+                        <div class="chat-input-container">
+                            <textarea 
+                                id="message-input" 
+                                class="form-control chat-input" 
+                                placeholder="Type your message here..."
+                                rows="1"
+                            ></textarea>
+                            <button class="btn btn--primary" id="send-btn" disabled>Send</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Progress and Summary Panel -->
+                <div class="summary-section">
+                    <div class="progress-card card">
+                        <div class="card__header">
+                            <h3>Application Progress</h3>
+                        </div>
+                        <div class="card__body">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                            </div>
+                            <div class="progress-text">
+                                <span id="progress-percentage">0%</span> Complete
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="checklist-card card">
+                        <div class="card__header">
+                            <h3>Information Checklist</h3>
+                        </div>
+                        <div class="card__body">
+                            <div class="checklist" id="checklist">
+                                <div class="checklist-item" data-step="personal">
+                                    <div class="checklist-icon">◯</div>
+                                    <span>Personal Information</span>
+                                </div>
+                                <div class="checklist-item" data-step="employment">
+                                    <div class="checklist-icon">◯</div>
+                                    <span>Employment Details</span>
+                                </div>
+                                <div class="checklist-item" data-step="loan">
+                                    <div class="checklist-icon">◯</div>
+                                    <span>Loan Information</span>
+                                </div>
+                                <div class="checklist-item" data-step="financial">
+                                    <div class="checklist-icon">◯</div>
+                                    <span>Financial Information</span>
+                                </div>
+                                <div class="checklist-item" data-step="documents">
+                                    <div class="checklist-icon">◯</div>
+                                    <span>Documentation</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="summary-card card" id="summary-card">
+                        <div class="card__header">
+                            <h3>Application Summary</h3>
+                        </div>
+                        <div class="card__body">
+                            <div class="summary-content" id="summary-content">
+                                <p class="text-secondary">Information will appear here as we collect it through our conversation.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="actions-card card">
+                        <div class="card__body">
+                            <button class="btn btn--outline btn--full-width" id="review-btn" disabled>
+                                Review Application
+                            </button>
+                            <button class="btn btn--primary btn--full-width mt-8" id="submit-btn" disabled>
+                                Submit Application
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- API Key Modal -->
+    <div class="modal-overlay" id="api-modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>DeepSeek API Configuration</h3>
+            </div>
+            <div class="modal-body">
+                <p>Please enter your DeepSeek API key to get started:</p>
+                <div class="form-group">
+                    <label class="form-label">API Key</label>
+                    <input type="password" class="form-control" id="api-key-input" placeholder="sk-...">
+                </div>
+                <p class="text-secondary">Your API key will be stored securely in your browser session.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn--primary" id="save-api-key">Save & Start</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
