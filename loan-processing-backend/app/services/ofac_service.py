@@ -20,7 +20,7 @@ class OFACService:
         time.sleep(0.5)
         
         # 95% chance of passing OFAC check
-        if random.random() > 0.95:
+        if random.random() > 0.90:
             return False, "Potential match found - manual review required"
         
         return True, "OFAC check passed"

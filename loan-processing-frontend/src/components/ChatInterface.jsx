@@ -39,8 +39,9 @@ const steps = [
   { label: 'Loan Type', value: 'loan_type' },
   { label: 'Data Verification', value: 'confirm_data' },
   { label: 'Loan Amount', value: 'loan_amount' },
-  { label: 'Eligibility Check', value: 'eligibility_result' },
-  { label: 'Complete', value: 'complete' }
+  { label: 'Eligibility Check', value: 'eligibility_check' },
+  { label: 'Document Review', value: 'document_review' },
+  { label: 'Final Decision', value: 'final_decision' }
 ];
 
 const ChatInterface = () => {
@@ -55,6 +56,8 @@ const ChatInterface = () => {
   const [error, setError] = useState(null);
   const [typingIndicator, setTypingIndicator] = useState(false);
   const greetingSentRef = useRef(false);
+  const [documentDownloaded, setDocumentDownloaded] = useState(false);
+  const [agreementAccepted, setAgreementAccepted] = useState(null); // null: no decision, true: accepted, false: rejected
   // Randomly select a user ID for this session
   const [userId] = useState(() => userIds[Math.floor(Math.random() * userIds.length)]);
 
@@ -149,19 +152,51 @@ const ChatInterface = () => {
     try {
       const response = await loanAPI.calculateEligibility(userId, amount);
       setEligibilityData(response.data);
-      addMessage('Here are your eligibility results:');
-      setCurrentStep('eligibility_result');
       
-      // Only proceed to final confirmation if eligible
       if (response.data.is_eligible) {
-        const confirmResponse = await loanAPI.finalConfirmation(userId);
-        addMessage(confirmResponse.data.message);
-        setCurrentStep('complete');
+        addMessage('Here are your eligibility results:');
+        addMessage('Please review the loan agreement document and provide your e-signature.', false);
+        setCurrentStep('document_review');
+      } else {
+        addMessage('Here are your eligibility results:');
+        addMessage('You are not eligible to proceed with the loan application.', false);
+        setCurrentStep('final_decision');
       }
     } catch (error) {
-      addMessage('Error calculating eligibility. Please try again.');
+      setError('Error calculating eligibility. Please try again.');
+      addMessage('Error calculating eligibility. Please try again.', false);
+      setCurrentStep('final_decision');
     }
     setLoading(false);
+  };
+
+  const handleDocumentDownload = () => {
+    addMessage('Loan agreement document simulated for download.', false);
+    setDocumentDownloaded(true);
+  };
+
+  const handleAgreementAccept = async () => {
+    setLoading(true);
+    addMessage('I agree with the terms and conditions.', true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate processing
+      addMessage('Congratulations! Your loan has been processed. We will shortly send the documents for your signature.', false);
+      setAgreementAccepted(true);
+      setCurrentStep('final_decision');
+    } catch (error) {
+      setError('Error processing your agreement. Please try again.');
+      addMessage('Error processing your agreement. Please try again.', false);
+      setAgreementAccepted(false);
+      setCurrentStep('final_decision');
+    }
+    setLoading(false);
+  };
+
+  const handleAgreementReject = () => {
+    addMessage('I do not agree with the terms and conditions.', true);
+    addMessage('Please contact the nearest branch for further assistance.', false);
+    setAgreementAccepted(false);
+    setCurrentStep('final_decision');
   };
 
   const handleSendMessage = async () => {
@@ -178,7 +213,21 @@ const ChatInterface = () => {
     setLoading(false);
   };
 
-  const getActiveStep = () => {
+  const getActiveStepperStep = () => {
+    if (currentStep === 'final_decision') {
+      if (userData && !userData.ofac_check) {
+        return steps.findIndex(step => step.value === 'confirm_data');
+      }
+      if (eligibilityData && !eligibilityData.is_eligible) {
+        return steps.findIndex(step => step.value === 'eligibility_check');
+      }
+      if (documentDownloaded && agreementAccepted === false) {
+        return steps.findIndex(step => step.value === 'document_review');
+      }
+      if (agreementAccepted === true) {
+        return steps.findIndex(step => step.value === 'final_decision');
+      }
+    }
     return steps.findIndex(step => step.value === currentStep);
   };
 
@@ -214,7 +263,7 @@ const ChatInterface = () => {
         return userData && !userData.ofac_check ? (
           <Box sx={{ display: 'flex', gap: 2 }}>
             <Typography color="error" variant="body1">
-              You are not eligible to proceed with the loan application.
+              You are not eligible to proceed with the loan application. // please contact the nearest branch to get more information
             </Typography>
           </Box>
         ) : (
@@ -253,7 +302,6 @@ const ChatInterface = () => {
                   e.preventDefault();
                   handleLoanAmountSubmit();
                 }
-                // Shift+Enter inserts a newline by default
               }}
             />
             <Button
@@ -266,47 +314,69 @@ const ChatInterface = () => {
           </Box>
         );
       
-      case 'eligibility_result':
-      case 'complete':
-        return eligibilityData && !eligibilityData.is_eligible ? (
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <Typography color="error" variant="body1">
-              You are not eligible to proceed with the loan application.
-            </Typography>
+      case 'eligibility_check':
+        // The input area for eligibility_check is handled by the final_decision case below
+        // The eligibility card is rendered outside this renderInput function
+        return null;
+
+      case 'document_review':
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {!documentDownloaded && (
+              <Button
+                variant="contained"
+                onClick={handleDocumentDownload}
+                disabled={loading}
+                sx={{ bgcolor: JP_MORGAN_ACCENT, '&:hover': { bgcolor: '#007bbd' } }}
+              >
+                Download Loan Agreement
+              </Button>
+            )}
+            {documentDownloaded && agreementAccepted === null && (
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                <Button
+                  variant="contained"
+                  color="success"
+                  onClick={handleAgreementAccept}
+                  disabled={loading}
+                >
+                  Agree to Terms
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  onClick={handleAgreementReject}
+                  disabled={loading}
+                >
+                  Disagree
+                </Button>
+              </Box>
+            )}
           </Box>
-        ) : (
-          eligibilityData && eligibilityData.is_eligible && currentStep === 'complete' ? (
+        );
+      
+      case 'final_decision':
+        // If OFAC failed OR eligibility failed OR agreement was rejected
+        if ((userData && !userData.ofac_check) || (eligibilityData && !eligibilityData.is_eligible) || (agreementAccepted === false)) {
+          return (
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Typography color="error" variant="body1">
+                {agreementAccepted === false ? 'Please contact the nearest branch.' : 'You are not eligible to proceed with the loan application.'}
+              </Typography>
+            </Box>
+          );
+        }
+        // If agreement was accepted and eligible
+        if (eligibilityData && eligibilityData.is_eligible && agreementAccepted === true) {
+          return (
             <Box sx={{ display: 'flex', gap: 2 }}>
               <Typography color="success.main" variant="body1">
                 We will shortly send the documents for your signature.
               </Typography>
             </Box>
-          ) : (
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <TextField
-                fullWidth
-                multiline
-                minRows={2}
-                label="Type your message"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
-              />
-              <Button
-                variant="contained"
-                onClick={handleSendMessage}
-                disabled={loading || !input.trim()}
-              >
-                Send
-              </Button>
-            </Box>
-          )
-        );
+          );
+        }
+        return null; // Should ideally not reach here if flow is correct
       
       default:
         return null;
@@ -476,7 +546,7 @@ const ChatInterface = () => {
             </Typography>
             
             <Stepper 
-              activeStep={getActiveStep()} 
+              activeStep={getActiveStepperStep()} 
               orientation="vertical"
               sx={{
                 '& .MuiStepLabel-label': {
@@ -504,26 +574,31 @@ const ChatInterface = () => {
                 },
               }}
             >
-              {steps.map((step, index) => (
-                <Step 
-                  key={step.label}
-                  completed={
-                    index < getActiveStep() || (
-                      index === getActiveStep() && 
-                      step.value === 'eligibility_result' && 
-                      eligibilityData && 
-                      eligibilityData.is_eligible
-                    )
-                  }
-                  error={
-                    step.value === 'eligibility_result' && 
-                    eligibilityData && 
-                    !eligibilityData.is_eligible
-                  }
-                >
-                  <StepLabel>{step.label}</StepLabel>
-                </Step>
-              ))}
+              {steps.map((step, index) => {
+                const isActive = index === getActiveStepperStep();
+                const isCompleted = index < getActiveStepperStep();
+                let isError = false;
+
+                if (step.value === 'confirm_data' && userData && !userData.ofac_check) {
+                  isError = true;
+                }
+                if (step.value === 'eligibility_check' && eligibilityData && !eligibilityData.is_eligible) {
+                  isError = true;
+                }
+                if (step.value === 'document_review' && documentDownloaded && agreementAccepted === false) {
+                  isError = true;
+                }
+
+                return (
+                  <Step 
+                    key={step.label}
+                    completed={isCompleted || (step.value === 'final_decision' && currentStep === 'final_decision' && agreementAccepted === true)}
+                    error={isError || (step.value === 'final_decision' && currentStep === 'final_decision' && agreementAccepted === false)}
+                  >
+                    <StepLabel>{step.label}</StepLabel>
+                  </Step>
+                );
+              })}
             </Stepper>
           </Paper>
         </Grid>
