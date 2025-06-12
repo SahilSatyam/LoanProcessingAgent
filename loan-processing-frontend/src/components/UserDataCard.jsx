@@ -79,13 +79,13 @@ const UserDataCard = ({ userData }) => {
           </Grid>
           <InfoRow
             icon={VerifiedUserIcon}
-            label="OFAC Status"
+            label="Sanction Check Status"
             value={userData.ofac_status}
           />
           <Grid item xs={12}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
               <Chip
-                label={userData.ofac_check ? 'OFAC Check Passed' : 'OFAC Check Failed'}
+                label={userData.ofac_check ? 'Sanction Check Passed' : 'Sanction Check Failed'}
                 color={userData.ofac_check ? 'success' : 'error'}
                 size="small"
               />

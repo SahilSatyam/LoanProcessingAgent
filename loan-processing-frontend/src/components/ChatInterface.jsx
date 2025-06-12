@@ -159,7 +159,7 @@ const ChatInterface = () => {
         setCurrentStep('document_review');
       } else {
         addMessage('Here are your eligibility results:');
-        addMessage('You are not eligible to proceed with the loan application.', false);
+        addMessage('Please contact the nearest branch for further assistance.', false);
         setCurrentStep('final_decision');
       }
     } catch (error) {
@@ -170,9 +170,26 @@ const ChatInterface = () => {
     setLoading(false);
   };
 
-  const handleDocumentDownload = () => {
-    addMessage('Loan agreement document simulated for download.', false);
-    setDocumentDownloaded(true);
+  const handleDocumentDownload = async () => {
+    setLoading(true);
+    try {
+      const blob = await loanAPI.downloadLoanAgreement();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'Loan_Agreement.doc');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      addMessage('Loan agreement document downloaded successfully.', false);
+      setDocumentDownloaded(true);
+    } catch (error) {
+      setError('Error downloading the loan agreement. Please try again.');
+      addMessage('Error downloading the loan agreement. Please try again.', false);
+    }
+    setLoading(false);
   };
 
   const handleAgreementAccept = async () => {
@@ -180,7 +197,7 @@ const ChatInterface = () => {
     addMessage('I agree with the terms and conditions.', true);
     try {
       await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate processing
-      addMessage('Congratulations! Your loan has been processed. We will shortly send the documents for your signature.', false);
+      addMessage('Congratulations! Your loan has been processed.', false);
       setAgreementAccepted(true);
       setCurrentStep('final_decision');
     } catch (error) {
@@ -263,7 +280,7 @@ const ChatInterface = () => {
         return userData && !userData.ofac_check ? (
           <Box sx={{ display: 'flex', gap: 2 }}>
             <Typography color="error" variant="body1">
-              You are not eligible to proceed with the loan application. // please contact the nearest branch to get more information
+              Please contact the nearest branch to get more information.
             </Typography>
           </Box>
         ) : (
@@ -361,7 +378,7 @@ const ChatInterface = () => {
           return (
             <Box sx={{ display: 'flex', gap: 2 }}>
               <Typography color="error" variant="body1">
-                {agreementAccepted === false ? 'Please contact the nearest branch.' : 'You are not eligible to proceed with the loan application.'}
+                {agreementAccepted === false ? 'Please contact the nearest branch.' : 'Please contact the nearest branch to get your issue resolved.'}
               </Typography>
             </Box>
           );
@@ -371,7 +388,7 @@ const ChatInterface = () => {
           return (
             <Box sx={{ display: 'flex', gap: 2 }}>
               <Typography color="success.main" variant="body1">
-                We will shortly send the documents for your signature.
+                Congratulations, your loan is processed. We will send the amount shortly.
               </Typography>
             </Box>
           );

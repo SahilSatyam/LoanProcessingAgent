@@ -30,4 +30,15 @@ export const loanAPI = {
 
   continueConversation: (userId, message) =>
     api.post('/chat', { user_id: userId, message }),
+
+  downloadLoanAgreement: async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/download-loan-agreement`, {
+        responseType: 'blob'
+      });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
 };

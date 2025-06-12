@@ -1,10 +1,12 @@
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from .models import *
 from .services.excel_service import ExcelService
 from .services.ofac_service import OFACService
 from .services.llm_service import LLMService
 import time
+import os
 
 app = FastAPI(title="AI Loan Processing API")
 
@@ -273,7 +275,7 @@ async def final_confirmation(request: UserRequest):
     }
     
     if is_eligible:
-        message = "Congratulations you have In-Principal approval for the amount. The amount will be released post execution of the Loan Agreement. Request you to review and sign the loan agreement shared to you through offical channels"
+        message = "Congratulations you have In-Principal approval for the amount. The amount will be released post execution of the Loan Agreement. Request you to review and sign the loan agreement shared to you."
     else:
         message = llm_service.generate_response(
             "Generate a denial message for the loan application",
@@ -306,3 +308,15 @@ async def chat(user_id: str = Body(...), message: str = Body(...)):
     
     reply = llm_service.generate_response(message, context, user_id)
     return {"message": reply}
+
+@app.get("/download-loan-agreement")
+async def download_loan_agreement():
+    """Serve the loan agreement document"""
+    file_path = os.path.join("data", "Format-Loan Agreement.doc")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Loan agreement document not found")
+    return FileResponse(
+        path=file_path,
+        filename="Loan_Agreement.doc",
+        media_type="application/msword"
+    )
