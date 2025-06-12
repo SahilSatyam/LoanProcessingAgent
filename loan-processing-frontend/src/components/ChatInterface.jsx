@@ -24,6 +24,14 @@ import MessageBubble from './MessageBubble';
 import UserDataCard from './UserDataCard';
 import { loanAPI } from '../services/api';
 
+const JP_MORGAN_BLUE = '#003366';
+const JP_MORGAN_LIGHT = '#f4f6fa';
+const JP_MORGAN_ACCENT = '#00a3e0';
+const JP_MORGAN_GRAY = '#e5e8ed';
+const JP_MORGAN_SHADOW = '0 4px 24px rgba(0, 51, 102, 0.08)';
+
+const userIds = ['USR001', 'USR002', 'USR003', 'USR004'];
+
 const ChatInterface = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -36,9 +44,8 @@ const ChatInterface = () => {
   const [error, setError] = useState(null);
   const [typingIndicator, setTypingIndicator] = useState(false);
   const greetingSentRef = useRef(false);
-
-  // Demo user ID - in production, this would come from authentication
-  const userId = 'USR001';
+  // Randomly select a user ID for this session
+  const [userId] = useState(() => userIds[Math.floor(Math.random() * userIds.length)]);
 
   useEffect(() => {
     if (!greetingSentRef.current) {
@@ -88,7 +95,7 @@ const ChatInterface = () => {
       const response = await loanAPI.fetchUserData(userId, loanType);
       setTimeout(() => {
         setUserData(response.data);
-        addMessage("I've retrieved your information from our system:");
+        addMessage(response.data.llm_message);
         setCurrentStep('confirm_data');
         setTypingIndicator(false);
       }, 1500);
@@ -273,13 +280,16 @@ const ChatInterface = () => {
   return (
     <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
       <Paper 
-        elevation={3} 
+        elevation={0}
         sx={{ 
-          p: 3, 
+          p: { xs: 1, sm: 3 },
           height: '85vh', 
           display: 'flex', 
           flexDirection: 'column',
-          background: 'linear-gradient(to bottom right, #ffffff, #f8fafc)',
+          background: `linear-gradient(135deg, ${JP_MORGAN_LIGHT} 0%, #eaf1f8 100%)`,
+          borderRadius: 5,
+          boxShadow: JP_MORGAN_SHADOW,
+          border: `1.5px solid ${JP_MORGAN_GRAY}`,
         }}
       >
         <Typography 
@@ -287,8 +297,11 @@ const ChatInterface = () => {
           gutterBottom 
           sx={{ 
             textAlign: 'center',
-            color: 'primary.main',
+            color: JP_MORGAN_BLUE,
             mb: 3,
+            fontWeight: 700,
+            letterSpacing: '-0.5px',
+            fontFamily: 'Inter, Segoe UI, Arial, sans-serif',
           }}
         >
           AI Loan Assistant
@@ -299,20 +312,14 @@ const ChatInterface = () => {
             flexGrow: 1, 
             overflow: 'auto', 
             mb: 2,
-            px: 2,
+            px: { xs: 0, sm: 2 },
             '&::-webkit-scrollbar': {
               width: '8px',
-            },
-            '&::-webkit-scrollbar-track': {
-              background: '#f1f1f1',
-              borderRadius: '4px',
+              background: JP_MORGAN_LIGHT,
             },
             '&::-webkit-scrollbar-thumb': {
-              background: '#888',
+              background: JP_MORGAN_GRAY,
               borderRadius: '4px',
-              '&:hover': {
-                background: '#555',
-              },
             },
           }}
         >
@@ -330,7 +337,7 @@ const ChatInterface = () => {
               {userData &&
                 !msg.isUser &&
                 msg.text &&
-                msg.text.toLowerCase().includes("i've retrieved your information from our system") && (
+                msg.text === userData.llm_message && (
                   <Zoom in={true}>
                     <Box sx={{ my: 2 }}>
                       <UserDataCard userData={userData} />
@@ -366,7 +373,7 @@ const ChatInterface = () => {
                           </Grid>
                           <Grid item xs={12}>
                             <Chip
-                              label={eligibilityData.is_eligible ? 'APPROVED' : 'DENIED'}
+                              label={eligibilityData.is_eligible ? 'ELIGIBLE' : 'NOT ELIGIBLE'}
                               color={eligibilityData.is_eligible ? 'success' : 'error'}
                               size="large"
                               sx={{ 
@@ -398,7 +405,7 @@ const ChatInterface = () => {
           <div ref={messagesEndRef} />
         </Box>
         
-        <Box sx={{ mt: 'auto', pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+        <Box sx={{ mt: 'auto', pt: 2, borderTop: `1.5px solid ${JP_MORGAN_GRAY}`, background: JP_MORGAN_LIGHT, borderRadius: '0 0 32px 32px' }}>
           {renderInput()}
         </Box>
       </Paper>

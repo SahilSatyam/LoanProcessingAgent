@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Typography, Paper } from '@mui/material';
 import { format } from 'date-fns';
+import { marked } from 'marked';
 
 const MessageBubble = ({ message, isUser, timestamp }) => {
   return (
@@ -18,8 +19,13 @@ const MessageBubble = ({ message, isUser, timestamp }) => {
           maxWidth: '70%',
           backgroundColor: isUser ? 'primary.main' : 'grey.100',
           color: isUser ? 'white' : 'text.primary',
-          borderRadius: 2,
+          borderRadius: isUser
+            ? '16px 16px 4px 16px'
+            : '16px 16px 16px 4px',
           position: 'relative',
+          textAlign: isUser ? 'right' : 'left',
+          ml: isUser ? 'auto' : 0,
+          mr: isUser ? 0 : 'auto',
           '&::before': {
             content: '""',
             position: 'absolute',
@@ -28,16 +34,18 @@ const MessageBubble = ({ message, isUser, timestamp }) => {
             transform: 'translateY(-50%)',
             borderStyle: 'solid',
             borderWidth: '8px 0 8px 8px',
-            borderColor: isUser 
-              ? 'transparent transparent transparent primary.main'
-              : 'transparent transparent transparent grey.100',
+            borderColor: isUser
+              ? 'transparent transparent transparent #2563eb'
+              : 'transparent transparent transparent #f3f6f9',
             [isUser ? 'borderRight' : 'borderLeft']: 'none',
           },
         }}
       >
-        <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-          {message}
-        </Typography>
+        <Typography
+          variant="body1"
+          sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', textAlign: isUser ? 'right' : 'left' }}
+          dangerouslySetInnerHTML={{ __html: marked.parse(message) }}
+        />
         {timestamp && (
           <Typography
             variant="caption"

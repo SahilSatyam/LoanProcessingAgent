@@ -4,10 +4,11 @@ from .models import *
 from .services.excel_service import ExcelService
 from .services.ofac_service import OFACService
 from .services.llm_service import LLMService
+import time
 
 app = FastAPI(title="AI Loan Processing API")
 
-# Configure CORS [[1]][[2]]
+# Configure CORS
 origins = [
     "http://localhost:3000",
     "http://localhost:5173",
@@ -42,13 +43,23 @@ async def greet_user(request: UserRequest):
     if not user_data:
         raise HTTPException(status_code=404, detail="User not found")
     
-    context = {'name': user_data.get('Name', 'valued customer')}
-    prompt = f"Greet the user {context['name']} and ask what type of loan they're interested in"
+    context = {
+        'name': user_data.get('Name', 'valued customer'),
+        'step': 'greeting',
+        'timestamp': time.time()
+    }
     
-    message = llm_service.generate_response(prompt, context)
+    message = llm_service.generate_response(
+        f"Greet the user {context['name']} and ask what type of loan they're interested in",
+        context,
+        request.user_id
+    )
     
     # Store session
-    user_sessions[request.user_id] = {'step': 'loan_type_selection'}
+    user_sessions[request.user_id] = {
+        'step': 'loan_type_selection',
+        'context': context
+    }
     
     return LLMResponse(message=message, next_step="select_loan_type")
 
@@ -61,14 +72,48 @@ async def fetch_user_data(request: LoanTypeRequest):
     
     # Perform OFAC check
     ofac_clear, ofac_status = ofac_service.check_sanctions(user_data['Name'])
-    print(ofac_clear, ofac_status)
     
-    # Update session
-    user_sessions[request.user_id] = {
-        'step': 'data_confirmation',
+    # Generate LLM response with user data context
+    context = {
+        'name': user_data['Name'],
+        'monthly_income': user_data['Monthly Income'],
+        'monthly_expenses': user_data['Monthly Expenses'],
+        'existing_loan': user_data.get('Existing Loan', 0),
         'loan_type': request.loan_type,
-        'user_data': user_data
+        'ofac_status': ofac_status,
+        'ofac_clear': ofac_clear,
+        'step': 'data_verification',
+        'timestamp': time.time()
     }
+    
+    # Different prompts based on OFAC check result
+    if not ofac_clear:
+        message = f"Thank you for your interest in applying for a loan, {user_data['Name']}. After reviewing your application, we regret to inform you that we are unable to proceed due to compliance requirements. Unfortunately, we cannot move forward with processing your request at this time.\n\nWe appreciate your understanding, and if you have any questions, please don't hesitate to reach out. Thank you."
+        
+        # Update session to indicate process should stop
+        user_sessions[request.user_id] = {
+            'step': 'ofac_failed',
+            'loan_type': request.loan_type,
+            'user_data': user_data,
+            'context': context,
+            'llm_message': message,
+            'process_complete': True  # Flag to indicate process should stop
+        }
+    else:
+        message = llm_service.generate_response(
+            f"Mention they are interested in a {request.loan_type} loan. Ask them to press the button to confirm if the data rendered in the UI is correct, without providing them any information. The button and data is rendered in the UI, you do not need to do any thing",
+            context,
+            request.user_id
+        )
+        # Update session for normal flow
+        user_sessions[request.user_id] = {
+            'step': 'data_confirmation',
+            'loan_type': request.loan_type,
+            'user_data': user_data,
+            'context': context,
+            'llm_message': message,
+            'process_complete': False
+        }
     
     return UserData(
         user_id=request.user_id,
@@ -77,7 +122,8 @@ async def fetch_user_data(request: LoanTypeRequest):
         monthly_expenses=float(user_data['Monthly Expenses']),
         existing_loan=float(user_data.get('Existing Loan', 0)),
         ofac_check=ofac_clear,
-        ofac_status=ofac_status
+        ofac_status=ofac_status,
+        llm_message=message
     )
 
 @app.post("/confirm_user_data", response_model=LLMResponse)
@@ -86,18 +132,60 @@ async def confirm_user_data(request: UserRequest):
     if request.user_id not in user_sessions:
         raise HTTPException(status_code=400, detail="Session not found")
     
-    prompt = "Ask user to confirm their data and explain next step is to enter loan amount"
-    message = llm_service.generate_response(prompt)
+    session = user_sessions[request.user_id]
+    
+    # Check if process should be stopped
+    if session.get('process_complete', False):
+        return LLMResponse(
+            message=session.get('llm_message', 'Process cannot continue.'),
+            next_step="complete"
+        )
+    
+    context = {
+        **session.get('context', {}),
+        'step': 'data_confirmation',
+        'timestamp': time.time()
+    }
+    
+    message = llm_service.generate_response(
+        "Ask user to confirm their data and explain next step is to enter loan amount",
+        context,
+        request.user_id
+    )
     
     user_sessions[request.user_id]['step'] = 'loan_amount_input'
+    user_sessions[request.user_id]['context'] = context
     
     return LLMResponse(message=message, next_step="enter_loan_amount")
 
 @app.post("/ask_loan_amount", response_model=LLMResponse)
 async def ask_loan_amount(request: UserRequest):
     """Ask for desired loan amount"""
-    prompt = "Ask the user to enter their desired loan amount"
-    message = llm_service.generate_response(prompt)
+    if request.user_id not in user_sessions:
+        raise HTTPException(status_code=400, detail="Session not found")
+    
+    session = user_sessions[request.user_id]
+    
+    # Check if process should be stopped
+    if session.get('process_complete', False):
+        return LLMResponse(
+            message=session.get('llm_message', 'Process cannot continue.'),
+            next_step="complete"
+        )
+    
+    context = {
+        **session.get('context', {}),
+        'step': 'loan_amount_input',
+        'timestamp': time.time()
+    }
+    
+    message = llm_service.generate_response(
+        "Ask the user to enter their desired loan amount",
+        context,
+        request.user_id
+    )
+    
+    user_sessions[request.user_id]['context'] = context
     
     return LLMResponse(message=message, next_step="calculate_eligibility")
 
@@ -107,7 +195,19 @@ async def calculate_eligibility(request: LoanAmountRequest):
     if request.user_id not in user_sessions:
         raise HTTPException(status_code=400, detail="Session not found")
     
-    user_data = user_sessions[request.user_id]['user_data']
+    session = user_sessions[request.user_id]
+    
+    # Check if process should be stopped
+    if session.get('process_complete', False):
+        return LoanEligibility(
+            total_loan_eligibility=0,
+            eligible_loan_amount=0,
+            requested_amount=0,
+            is_eligible=False,
+            message=session.get('llm_message', 'Process cannot continue.')
+        )
+    
+    user_data = session['user_data']
     
     # Calculate eligibility using provided formula
     monthly_income = user_data['Monthly Income']
@@ -119,11 +219,24 @@ async def calculate_eligibility(request: LoanAmountRequest):
     
     is_eligible = request.loan_amount <= eligible_loan_amount and eligible_loan_amount > 0
     
+    context = {
+        **session.get('context', {}),
+        'step': 'eligibility_calculation',
+        'requested_amount': request.loan_amount,
+        'total_eligibility': total_loan_eligibility,
+        'eligible_amount': eligible_loan_amount,
+        'is_eligible': is_eligible,
+        'timestamp': time.time()
+    }
+    
     message = "Eligible" if is_eligible else "Not Eligible"
     
     # Update session
-    user_sessions[request.user_id]['loan_amount'] = request.loan_amount
-    user_sessions[request.user_id]['eligibility'] = is_eligible
+    user_sessions[request.user_id].update({
+        'loan_amount': request.loan_amount,
+        'eligibility': is_eligible,
+        'context': context
+    })
     
     return LoanEligibility(
         total_loan_eligibility=total_loan_eligibility,
@@ -140,17 +253,33 @@ async def final_confirmation(request: UserRequest):
         raise HTTPException(status_code=400, detail="Session not found")
     
     session = user_sessions[request.user_id]
+    
+    # Check if process should be stopped
+    if session.get('process_complete', False):
+        return LLMResponse(
+            message=session.get('llm_message', 'Process cannot continue.'),
+            next_step="complete"
+        )
+    
     is_eligible = session.get('eligibility', False)
     loan_amount = session.get('loan_amount', 0)
     
-    context = {'amount': loan_amount}
+    context = {
+        **session.get('context', {}),
+        'step': 'final_confirmation',
+        'amount': loan_amount,
+        'is_eligible': is_eligible,
+        'timestamp': time.time()
+    }
     
     if is_eligible:
-        prompt = "Generate an approval message for the loan application"
-        message = llm_service.generate_response("loan approved", context)
+        message = "Congratulations you have In-Principal approval for the amount. The amount will be released post execution of the Loan Agreement. Request you to review and sign the loan agreement shared to you through offical channels"
     else:
-        prompt = "Generate a denial message for the loan application"
-        message = llm_service.generate_response("loan denied", context)
+        message = llm_service.generate_response(
+            "Generate a denial message for the loan application",
+            context,
+            request.user_id
+        )
     
     # Clear session
     del user_sessions[request.user_id]
@@ -160,7 +289,20 @@ async def final_confirmation(request: UserRequest):
 @app.post("/chat")
 async def chat(user_id: str = Body(...), message: str = Body(...)):
     """Handle ongoing chat conversation with the assistant"""
-    # Optionally, you can use user_sessions to maintain context if needed
-    # For now, just generate a response using the LLMService
-    reply = llm_service.generate_response(message)
+    if user_id not in user_sessions:
+        raise HTTPException(status_code=400, detail="Session not found")
+    
+    session = user_sessions[user_id]
+    
+    # Check if process should be stopped
+    if session.get('process_complete', False):
+        return {"message": session.get('llm_message', 'Process cannot continue.')}
+    
+    context = {
+        **session.get('context', {}),
+        'step': 'chat',
+        'timestamp': time.time()
+    }
+    
+    reply = llm_service.generate_response(message, context, user_id)
     return {"message": reply}

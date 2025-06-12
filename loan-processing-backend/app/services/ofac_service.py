@@ -10,7 +10,7 @@ class OFACService:
         # In production, this would call actual OFAC API
         
         # List of sanctioned names for simulation
-        sanctioned_names = ['Bad Actor', 'Sanctioned Person']
+        sanctioned_names = ['Stephanie Martin', 'Sanctioned Person']
         
         if user_name in sanctioned_names:
             return False, "User found on sanctions list"

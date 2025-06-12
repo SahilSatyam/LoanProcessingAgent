@@ -17,6 +17,7 @@ class UserData(BaseModel):
     existing_loan: float
     ofac_check: bool
     ofac_status: str
+    llm_message: str
 
 class LoanAmountRequest(BaseModel):
     user_id: str
