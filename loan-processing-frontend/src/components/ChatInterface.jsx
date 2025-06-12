@@ -19,6 +19,9 @@ import {
   Zoom,
   Alert,
   Snackbar,
+  Stepper,
+  Step,
+  StepLabel,
 } from '@mui/material';
 import MessageBubble from './MessageBubble';
 import UserDataCard from './UserDataCard';
@@ -31,6 +34,14 @@ const JP_MORGAN_GRAY = '#e5e8ed';
 const JP_MORGAN_SHADOW = '0 4px 24px rgba(0, 51, 102, 0.08)';
 
 const userIds = ['USR001', 'USR002', 'USR003', 'USR004'];
+
+const steps = [
+  { label: 'Loan Type', value: 'loan_type' },
+  { label: 'Data Verification', value: 'confirm_data' },
+  { label: 'Loan Amount', value: 'loan_amount' },
+  { label: 'Eligibility Check', value: 'eligibility_result' },
+  { label: 'Complete', value: 'complete' }
+];
 
 const ChatInterface = () => {
   const [messages, setMessages] = useState([]);
@@ -141,10 +152,12 @@ const ChatInterface = () => {
       addMessage('Here are your eligibility results:');
       setCurrentStep('eligibility_result');
       
-      // Get final confirmation
-      const confirmResponse = await loanAPI.finalConfirmation(userId);
-      addMessage(confirmResponse.data.message);
-      setCurrentStep('complete');
+      // Only proceed to final confirmation if eligible
+      if (response.data.is_eligible) {
+        const confirmResponse = await loanAPI.finalConfirmation(userId);
+        addMessage(confirmResponse.data.message);
+        setCurrentStep('complete');
+      }
     } catch (error) {
       addMessage('Error calculating eligibility. Please try again.');
     }
@@ -163,6 +176,10 @@ const ChatInterface = () => {
     }
     setInput("");
     setLoading(false);
+  };
+
+  const getActiveStep = () => {
+    return steps.findIndex(step => step.value === currentStep);
   };
 
   const renderInput = () => {
@@ -194,7 +211,13 @@ const ChatInterface = () => {
         );
       
       case 'confirm_data':
-        return (
+        return userData && !userData.ofac_check ? (
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Typography color="error" variant="body1">
+              You are not eligible to proceed with the loan application.
+            </Typography>
+          </Box>
+        ) : (
           <Box sx={{ display: 'flex', gap: 2 }}>
             <Button
               variant="contained"
@@ -245,31 +268,44 @@ const ChatInterface = () => {
       
       case 'eligibility_result':
       case 'complete':
-        return (
+        return eligibilityData && !eligibilityData.is_eligible ? (
           <Box sx={{ display: 'flex', gap: 2 }}>
-            <TextField
-              fullWidth
-              multiline
-              minRows={2}
-              label="Type your message"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-                // Shift+Enter inserts a newline by default
-              }}
-            />
-            <Button
-              variant="contained"
-              onClick={handleSendMessage}
-              disabled={loading || !input.trim()}
-            >
-              Send
-            </Button>
+            <Typography color="error" variant="body1">
+              You are not eligible to proceed with the loan application.
+            </Typography>
           </Box>
+        ) : (
+          eligibilityData && eligibilityData.is_eligible && currentStep === 'complete' ? (
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Typography color="success.main" variant="body1">
+                We will shortly send the documents for your signature.
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                label="Type your message"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+              />
+              <Button
+                variant="contained"
+                onClick={handleSendMessage}
+                disabled={loading || !input.trim()}
+              >
+                Send
+              </Button>
+            </Box>
+          )
         );
       
       default:
@@ -278,137 +314,220 @@ const ChatInterface = () => {
   };
 
   return (
-    <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-      <Paper 
-        elevation={0}
-        sx={{ 
-          p: { xs: 1, sm: 3 },
-          height: '85vh', 
-          display: 'flex', 
-          flexDirection: 'column',
-          background: `linear-gradient(135deg, ${JP_MORGAN_LIGHT} 0%, #eaf1f8 100%)`,
-          borderRadius: 5,
-          boxShadow: JP_MORGAN_SHADOW,
-          border: `1.5px solid ${JP_MORGAN_GRAY}`,
-        }}
-      >
-        <Typography 
-          variant="h4" 
-          gutterBottom 
-          sx={{ 
-            textAlign: 'center',
-            color: JP_MORGAN_BLUE,
-            mb: 3,
-            fontWeight: 700,
-            letterSpacing: '-0.5px',
-            fontFamily: 'Inter, Segoe UI, Arial, sans-serif',
-          }}
-        >
-          AI Loan Assistant
-        </Typography>
-        
-        <Box 
-          sx={{ 
-            flexGrow: 1, 
-            overflow: 'auto', 
-            mb: 2,
-            px: { xs: 0, sm: 2 },
-            '&::-webkit-scrollbar': {
-              width: '8px',
-              background: JP_MORGAN_LIGHT,
-            },
-            '&::-webkit-scrollbar-thumb': {
-              background: JP_MORGAN_GRAY,
-              borderRadius: '4px',
-            },
-          }}
-        >
-          {messages.map((msg, index) => (
-            <React.Fragment key={index}>
-              <Fade in={true}>
-                <Box>
-                  <MessageBubble 
-                    message={msg.text} 
-                    isUser={msg.isUser}
-                    timestamp={msg.timestamp}
-                  />
-                </Box>
-              </Fade>
-              {userData &&
-                !msg.isUser &&
-                msg.text &&
-                msg.text === userData.llm_message && (
-                  <Zoom in={true}>
-                    <Box sx={{ my: 2 }}>
-                      <UserDataCard userData={userData} />
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={9}>
+          <Paper 
+            elevation={0}
+            sx={{ 
+              p: { xs: 1, sm: 3 },
+              height: '85vh', 
+              display: 'flex', 
+              flexDirection: 'column',
+              background: `linear-gradient(135deg, ${JP_MORGAN_LIGHT} 0%, #eaf1f8 100%)`,
+              borderRadius: 5,
+              boxShadow: JP_MORGAN_SHADOW,
+              border: `1.5px solid ${JP_MORGAN_GRAY}`,
+            }}
+          >
+            <Typography 
+              variant="h4" 
+              gutterBottom 
+              sx={{ 
+                textAlign: 'center',
+                color: JP_MORGAN_BLUE,
+                mb: 3,
+                fontWeight: 700,
+                letterSpacing: '-0.5px',
+                fontFamily: 'Inter, Segoe UI, Arial, sans-serif',
+              }}
+            >
+              AI Loan Assistant
+            </Typography>
+            
+            <Box 
+              sx={{ 
+                flexGrow: 1, 
+                overflow: 'auto', 
+                mb: 2,
+                px: { xs: 0, sm: 2 },
+                '&::-webkit-scrollbar': {
+                  width: '8px',
+                  background: JP_MORGAN_LIGHT,
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  background: JP_MORGAN_GRAY,
+                  borderRadius: '4px',
+                },
+              }}
+            >
+              {messages.map((msg, index) => (
+                <React.Fragment key={index}>
+                  <Fade in={true}>
+                    <Box>
+                      <MessageBubble 
+                        message={msg.text} 
+                        isUser={msg.isUser}
+                        timestamp={msg.timestamp}
+                      />
                     </Box>
-                  </Zoom>
-                )}
-              {eligibilityData &&
-                !msg.isUser &&
-                msg.text &&
-                msg.text.toLowerCase().includes('here are your eligibility results') && (
-                  <Zoom in={true}>
-                    <Card sx={{ mb: 2, border: '1px solid', borderColor: 'divider' }}>
-                      <CardContent>
-                        <Typography variant="h6" gutterBottom color="primary">
-                          Eligibility Results
-                        </Typography>
-                        <Grid container spacing={3}>
-                          <Grid item xs={6}>
-                            <Typography variant="body2" color="text.secondary">
-                              Maximum Eligible Amount
+                  </Fade>
+                  {userData &&
+                    !msg.isUser &&
+                    msg.text &&
+                    msg.text === userData.llm_message && (
+                      <Zoom in={true}>
+                        <Box sx={{ my: 2 }}>
+                          <UserDataCard userData={userData} />
+                        </Box>
+                      </Zoom>
+                    )}
+                  {eligibilityData &&
+                    !msg.isUser &&
+                    msg.text &&
+                    msg.text.toLowerCase().includes('here are your eligibility results') && (
+                      <Zoom in={true}>
+                        <Card sx={{ mb: 2, border: '1px solid', borderColor: 'divider' }}>
+                          <CardContent>
+                            <Typography variant="h6" gutterBottom color="primary">
+                              Eligibility Results
                             </Typography>
-                            <Typography variant="h5" color="primary.main" sx={{ fontWeight: 600 }}>
-                              ${eligibilityData.eligible_loan_amount.toLocaleString()}
-                            </Typography>
-                          </Grid>
-                          <Grid item xs={6}>
-                            <Typography variant="body2" color="text.secondary">
-                              Requested Amount
-                            </Typography>
-                            <Typography variant="h5" color="primary.main" sx={{ fontWeight: 600 }}>
-                              ${eligibilityData.requested_amount.toLocaleString()}
-                            </Typography>
-                          </Grid>
-                          <Grid item xs={12}>
-                            <Chip
-                              label={eligibilityData.is_eligible ? 'ELIGIBLE' : 'NOT ELIGIBLE'}
-                              color={eligibilityData.is_eligible ? 'success' : 'error'}
-                              size="large"
-                              sx={{ 
-                                mt: 2,
-                                px: 2,
-                                py: 1,
-                                fontSize: '1rem',
-                                fontWeight: 600,
-                              }}
-                            />
-                          </Grid>
-                        </Grid>
-                      </CardContent>
-                    </Card>
-                  </Zoom>
-                )}
-            </React.Fragment>
-          ))}
-          
-          {typingIndicator && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 2, mb: 2 }}>
-              <CircularProgress size={16} />
-              <Typography variant="body2" color="text.secondary">
-                AI is typing...
-              </Typography>
+                            <Grid container spacing={3}>
+                              <Grid item xs={6}>
+                                <Typography variant="body2" color="text.secondary">
+                                  Maximum Eligible Amount
+                                </Typography>
+                                <Typography variant="h5" color="primary.main" sx={{ fontWeight: 600 }}>
+                                  ${eligibilityData.eligible_loan_amount.toLocaleString()}
+                                </Typography>
+                              </Grid>
+                              <Grid item xs={6}>
+                                <Typography variant="body2" color="text.secondary">
+                                  Requested Amount
+                                </Typography>
+                                <Typography variant="h5" color="primary.main" sx={{ fontWeight: 600 }}>
+                                  ${eligibilityData.requested_amount.toLocaleString()}
+                                </Typography>
+                              </Grid>
+                              <Grid item xs={12}>
+                                <Chip
+                                  label={eligibilityData.is_eligible ? 'ELIGIBLE' : 'NOT ELIGIBLE'}
+                                  color={eligibilityData.is_eligible ? 'success' : 'error'}
+                                  size="large"
+                                  sx={{ 
+                                    mt: 2,
+                                    px: 2,
+                                    py: 1,
+                                    fontSize: '1rem',
+                                    fontWeight: 600,
+                                  }}
+                                />
+                              </Grid>
+                            </Grid>
+                          </CardContent>
+                        </Card>
+                      </Zoom>
+                    )}
+                </React.Fragment>
+              ))}
+              
+              {typingIndicator && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 2, mb: 2 }}>
+                  <CircularProgress size={16} />
+                  <Typography variant="body2" color="text.secondary">
+                    AI is typing...
+                  </Typography>
+                </Box>
+              )}
+              
+              <div ref={messagesEndRef} />
             </Box>
-          )}
-          
-          <div ref={messagesEndRef} />
-        </Box>
+            
+            <Box sx={{ mt: 'auto', pt: 2, borderTop: `1.5px solid ${JP_MORGAN_GRAY}`, background: JP_MORGAN_LIGHT, borderRadius: '0 0 32px 32px' }}>
+              {renderInput()}
+            </Box>
+          </Paper>
+        </Grid>
         
-        <Box sx={{ mt: 'auto', pt: 2, borderTop: `1.5px solid ${JP_MORGAN_GRAY}`, background: JP_MORGAN_LIGHT, borderRadius: '0 0 32px 32px' }}>
-          {renderInput()}
-        </Box>
-      </Paper>
+        <Grid item xs={12} md={3}>
+          <Paper 
+            elevation={0}
+            sx={{ 
+              p: 3,
+              height: '85vh',
+              background: JP_MORGAN_LIGHT,
+              borderRadius: 5,
+              boxShadow: JP_MORGAN_SHADOW,
+              border: `1.5px solid ${JP_MORGAN_GRAY}`,
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <Typography 
+              variant="h6" 
+              gutterBottom 
+              sx={{ 
+                color: JP_MORGAN_BLUE,
+                fontWeight: 600,
+                mb: 3,
+              }}
+            >
+              Application Progress
+            </Typography>
+            
+            <Stepper 
+              activeStep={getActiveStep()} 
+              orientation="vertical"
+              sx={{
+                '& .MuiStepLabel-label': {
+                  color: JP_MORGAN_BLUE,
+                  fontWeight: 500,
+                },
+                '& .MuiStepLabel-label.Mui-active': {
+                  color: JP_MORGAN_ACCENT,
+                  fontWeight: 600,
+                },
+                '& .MuiStepLabel-label.Mui-completed': {
+                  color: JP_MORGAN_BLUE,
+                },
+                '& .MuiStepIcon-root': {
+                  color: JP_MORGAN_GRAY,
+                },
+                '& .MuiStepIcon-root.Mui-active': {
+                  color: JP_MORGAN_ACCENT,
+                },
+                '& .MuiStepIcon-root.Mui-completed': {
+                  color: JP_MORGAN_BLUE,
+                },
+                '& .MuiStepIcon-root.Mui-error': {
+                  color: 'error.main', // Red color for error
+                },
+              }}
+            >
+              {steps.map((step, index) => (
+                <Step 
+                  key={step.label}
+                  completed={
+                    index < getActiveStep() || (
+                      index === getActiveStep() && 
+                      step.value === 'eligibility_result' && 
+                      eligibilityData && 
+                      eligibilityData.is_eligible
+                    )
+                  }
+                  error={
+                    step.value === 'eligibility_result' && 
+                    eligibilityData && 
+                    !eligibilityData.is_eligible
+                  }
+                >
+                  <StepLabel>{step.label}</StepLabel>
+                </Step>
+              ))}
+            </Stepper>
+          </Paper>
+        </Grid>
+      </Grid>
 
       <Snackbar 
         open={!!error} 
