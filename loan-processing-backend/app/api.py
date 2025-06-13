@@ -35,6 +35,38 @@ from .utils.logger import (
 import time
 import os
 from typing import Dict, Any
+from pydantic import BaseModel
+
+# Define updated response models
+class UserData(BaseModel):
+    user_id: str
+    name: str
+    email: str = "N/A"
+    phone: str = "N/A"
+    address: str = "N/A"
+    monthly_income: float
+    monthly_expenses: float
+    existing_loan: float
+    annual_income: float
+    current_debt: float
+    employment_status: str = "N/A"
+    ofac_check: bool
+    ofac_status: str
+    llm_message: str
+
+class LoanEligibility(BaseModel):
+    total_loan_eligibility: float
+    eligible_loan_amount: float
+    requested_amount: float
+    is_eligible: bool
+    message: str
+    interest_rate: float = 0.0
+    loan_term_years: int = 5
+    monthly_payment: float = 0.0
+    total_payment: float = 0.0
+    total_interest: float = 0.0
+    risk_score: int = 0
+    max_eligible_amount: float = 0.0
 
 # Initialize FastAPI app with enhanced configuration
 app = FastAPI(
@@ -138,12 +170,19 @@ async def fetch_user_data(request: LoanTypeRequest):
             request.user_id
         )
         
+        # Calculate annual income and current debt
+        monthly_income = float(user_data['Monthly Income'])
+        monthly_expenses = float(user_data['Monthly Expenses'])
+        existing_loan = float(user_data.get('Existing Loan', 0))
+        annual_income = monthly_income * 12
+        current_debt = existing_loan + (monthly_expenses * 12)
+        
         # Generate LLM response with user data context
         context = {
             'name': user_data['Name'],
-            'monthly_income': user_data['Monthly Income'],
-            'monthly_expenses': user_data['Monthly Expenses'],
-            'existing_loan': user_data.get('Existing Loan', 0),
+            'monthly_income': monthly_income,
+            'monthly_expenses': monthly_expenses,
+            'existing_loan': existing_loan,
             'loan_type': request.loan_type,
             'ofac_status': ofac_status,
             'ofac_clear': ofac_clear,
@@ -155,44 +194,34 @@ async def fetch_user_data(request: LoanTypeRequest):
         # Different prompts based on OFAC check result
         if not ofac_clear:
             message = f"Thank you for your interest in applying for a loan, {user_data['Name']}. After reviewing your application, we regret to inform you that we are unable to proceed due to compliance requirements. Unfortunately, we cannot move forward with processing your request at this time.\n\nWe appreciate your understanding, and if you have any questions, please don't hesitate to reach out. Thank you."
-            
-            # Update session to indicate process should stop
-            user_sessions[request.user_id] = {
-                'step': 'ofac_failed',
-                'loan_type': request.loan_type,
-                'user_data': user_data,
-                'context': context,
-                'llm_message': message,
-                'process_complete': True,
-                'created_at': time.time()
-            }
-            
-            logger.warning(f"OFAC check failed for user {request.user_id}: {ofac_status}")
         else:
             message = llm_service.generate_response(
                 f"Mention they are interested in a {request.loan_type} loan. Ask them to press the button to confirm if the data rendered in the UI is correct, without providing them any information. The button and data is rendered in the UI, you do not need to do any thing",
                 context,
                 request.user_id
             )
-            # Update session for normal flow
-            user_sessions[request.user_id] = {
-                'step': 'data_confirmation',
-                'loan_type': request.loan_type,
-                'user_data': user_data,
-                'context': context,
-                'llm_message': message,
-                'process_complete': False,
-                'created_at': time.time()
-            }
-            
-            logger.info(f"User data fetched and OFAC check passed for: {request.user_id}")
+        
+        # Update session for normal flow
+        user_sessions[request.user_id] = {
+            'step': 'data_confirmation',
+            'loan_type': request.loan_type,
+            'user_data': user_data,
+            'context': context,
+            'llm_message': message,
+            'process_complete': False,
+            'created_at': time.time()
+        }
+        
+        logger.info(f"User data fetched and OFAC check passed for: {request.user_id}")
         
         return UserData(
             user_id=request.user_id,
             name=user_data['Name'],
-            monthly_income=float(user_data['Monthly Income']),
-            monthly_expenses=float(user_data['Monthly Expenses']),
-            existing_loan=float(user_data.get('Existing Loan', 0)),
+            monthly_income=monthly_income,
+            monthly_expenses=monthly_expenses,
+            existing_loan=existing_loan,
+            annual_income=annual_income,
+            current_debt=current_debt,
             ofac_check=ofac_clear,
             ofac_status=ofac_status,
             llm_message=message
@@ -316,6 +345,16 @@ async def calculate_eligibility(request: LoanAmountRequest):
             disposable_income > 0
         )
         
+        # Calculate additional loan details
+        interest_rate = 5.0 if is_eligible else 0.0  # Example fixed rate
+        loan_term_years = settings.loan_term_years
+        monthly_payment = (request.loan_amount * (1 + interest_rate/100)) / (loan_term_years * 12) if is_eligible else 0
+        total_payment = monthly_payment * loan_term_years * 12 if is_eligible else 0
+        total_interest = total_payment - request.loan_amount if is_eligible else 0
+        
+        # Calculate risk score (0-100)
+        risk_score = min(100, max(0, int((existing_loan / (monthly_income * 12)) * 100)))
+        
         context = {
             **session.get('context', {}),
             'step': 'eligibility_calculation',
@@ -362,7 +401,14 @@ async def calculate_eligibility(request: LoanAmountRequest):
             eligible_loan_amount=eligible_loan_amount,
             requested_amount=request.loan_amount,
             is_eligible=is_eligible,
-            message=message
+            message=message,
+            interest_rate=interest_rate,
+            loan_term_years=loan_term_years,
+            monthly_payment=monthly_payment,
+            total_payment=total_payment,
+            total_interest=total_interest,
+            risk_score=risk_score,
+            max_eligible_amount=eligible_loan_amount
         )
         
     except (SessionNotFoundException, ValidationException):
