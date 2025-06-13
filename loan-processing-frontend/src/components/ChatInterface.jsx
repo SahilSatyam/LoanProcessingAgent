@@ -22,10 +22,36 @@ import {
   Stepper,
   Step,
   StepLabel,
+  Badge,
+  Tooltip,
+  LinearProgress,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
+import {
+  CheckCircle,
+  Error,
+  Warning,
+  Info,
+  Download,
+  Send,
+  Person,
+  SmartToy,
+  Refresh,
+  SignalWifiOff,
+  SignalWifi4Bar,
+  Speed,
+  Security,
+  Assessment,
+} from '@mui/icons-material';
 import MessageBubble from './MessageBubble';
 import UserDataCard from './UserDataCard';
-import { loanAPI } from '../services/api';
+import EnhancedUserDataCard from './EnhancedUserDataCard';
+import EnhancedEligibilityCard from './EnhancedEligibilityCard';
+import { loanAPI, handleApiError, checkConnection } from '../services/api';
 
 const JP_MORGAN_BLUE = '#003366';
 const JP_MORGAN_LIGHT = '#f4f6fa';
@@ -58,19 +84,84 @@ const ChatInterface = () => {
   const greetingSentRef = useRef(false);
   const [documentDownloaded, setDocumentDownloaded] = useState(false);
   const [agreementAccepted, setAgreementAccepted] = useState(null); // null: no decision, true: accepted, false: rejected
+  const [connectionStatus, setConnectionStatus] = useState({ connected: true, message: '' });
+  const [retryCount, setRetryCount] = useState(0);
+  const [showStats, setShowStats] = useState(false);
+  const [systemStats, setSystemStats] = useState(null);
+  const [requestInProgress, setRequestInProgress] = useState(false);
   // Randomly select a user ID for this session
   const [userId] = useState(() => userIds[Math.floor(Math.random() * userIds.length)]);
+  const connectionCheckInterval = useRef(null);
 
   useEffect(() => {
     if (!greetingSentRef.current) {
       handleGreeting();
+      startConnectionMonitoring();
       greetingSentRef.current = true;
     }
+    
+    // Cleanup on unmount
+    return () => {
+      if (connectionCheckInterval.current) {
+        clearInterval(connectionCheckInterval.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Connection monitoring
+  const startConnectionMonitoring = () => {
+    // Check connection immediately
+    checkConnectionStatus();
+    
+    // Set up periodic connection checks (every 30 seconds)
+    connectionCheckInterval.current = setInterval(checkConnectionStatus, 30000);
+  };
+
+  const checkConnectionStatus = async () => {
+    try {
+      const status = await checkConnection();
+      setConnectionStatus(status);
+      if (status.connected && retryCount > 0) {
+        setRetryCount(0); // Reset retry count on successful connection
+      }
+    } catch (error) {
+      setConnectionStatus({ 
+        connected: false, 
+        message: 'Unable to connect to server' 
+      });
+    }
+  };
+
+  // Enhanced error handling with retry logic
+  const handleApiCall = async (apiCall, context = '') => {
+    setRequestInProgress(true);
+    try {
+      const result = await apiCall();
+      setRetryCount(0); // Reset on success
+      return result;
+    } catch (error) {
+      const errorMessage = handleApiError(error, context);
+      setError(errorMessage);
+      setRetryCount(prev => prev + 1);
+      throw error;
+    } finally {
+      setRequestInProgress(false);
+    }
+  };
+
+  // System stats fetcher
+  const fetchSystemStats = async () => {
+    try {
+      const response = await loanAPI.getStats();
+      setSystemStats(response.data);
+    } catch (error) {
+      console.error('Failed to fetch system stats:', error);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -85,15 +176,18 @@ const ChatInterface = () => {
     setLoading(true);
     setTypingIndicator(true);
     try {
-      const response = await loanAPI.greetUser(userId, 'John Doe');
+      const response = await handleApiCall(
+        () => loanAPI.greetUser(userId, 'John Doe'),
+        'Initial Greeting'
+      );
       setTimeout(() => {
         addMessage(response.data.message);
         setCurrentStep('loan_type');
         setTypingIndicator(false);
       }, 1000);
     } catch (error) {
-      setError('Error connecting to server. Please try again.');
-      addMessage('Error connecting to server. Please try again.');
+      setTypingIndicator(false);
+      // Error already handled by handleApiCall
     }
     setLoading(false);
   };
@@ -106,7 +200,10 @@ const ChatInterface = () => {
     setTypingIndicator(true);
     
     try {
-      const response = await loanAPI.fetchUserData(userId, loanType);
+      const response = await handleApiCall(
+        () => loanAPI.fetchUserData(userId, loanType),
+        'Fetch User Data'
+      );
       setTimeout(() => {
         setUserData(response.data);
         addMessage(response.data.llm_message);
@@ -114,8 +211,8 @@ const ChatInterface = () => {
         setTypingIndicator(false);
       }, 1500);
     } catch (error) {
-      setError('Error fetching your data. Please try again.');
-      addMessage('Error fetching your data. Please try again.');
+      setTypingIndicator(false);
+      // Error already handled by handleApiCall
     }
     setLoading(false);
   };
@@ -126,11 +223,14 @@ const ChatInterface = () => {
     if (confirmed) {
       setLoading(true);
       try {
-        const response = await loanAPI.askLoanAmount(userId);
+        const response = await handleApiCall(
+          () => loanAPI.askLoanAmount(userId),
+          'Confirm User Data'
+        );
         addMessage(response.data.message);
         setCurrentStep('loan_amount');
       } catch (error) {
-        addMessage('Error processing confirmation. Please try again.');
+        // Error already handled by handleApiCall
       }
       setLoading(false);
     } else {
@@ -145,12 +245,20 @@ const ChatInterface = () => {
       return;
     }
     
+    if (amount > 10000000) {
+      setError('Loan amount cannot exceed $10,000,000');
+      return;
+    }
+    
     addMessage(`I'd like to apply for $${amount.toLocaleString()}`, true);
     setInput('');
     setLoading(true);
     
     try {
-      const response = await loanAPI.calculateEligibility(userId, amount);
+      const response = await handleApiCall(
+        () => loanAPI.calculateEligibility(userId, amount),
+        'Calculate Eligibility'
+      );
       setEligibilityData(response.data);
       
       if (response.data.is_eligible) {
@@ -163,9 +271,8 @@ const ChatInterface = () => {
         setCurrentStep('final_decision');
       }
     } catch (error) {
-      setError('Error calculating eligibility. Please try again.');
-      addMessage('Error calculating eligibility. Please try again.', false);
       setCurrentStep('final_decision');
+      // Error already handled by handleApiCall
     }
     setLoading(false);
   };
@@ -173,7 +280,11 @@ const ChatInterface = () => {
   const handleDocumentDownload = async () => {
     setLoading(true);
     try {
-      const blob = await loanAPI.downloadLoanAgreement();
+      const blob = await handleApiCall(
+        () => loanAPI.downloadLoanAgreement(),
+        'Download Agreement'
+      );
+      
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -186,8 +297,7 @@ const ChatInterface = () => {
       addMessage('Loan agreement document downloaded successfully.', false);
       setDocumentDownloaded(true);
     } catch (error) {
-      setError('Error downloading the loan agreement. Please try again.');
-      addMessage('Error downloading the loan agreement. Please try again.', false);
+      // Error already handled by handleApiCall
     }
     setLoading(false);
   };
@@ -401,36 +511,106 @@ const ChatInterface = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={9}>
-          <Paper 
-            elevation={0}
-            sx={{ 
-              p: { xs: 1, sm: 3 },
-              height: '85vh', 
-              display: 'flex', 
+    <Container maxWidth="xl" sx={{ py: 4, height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <Grid container spacing={3} sx={{ flexGrow: 1, height: '100%' }}>
+        {/* Main Chat Area */}
+        <Grid item xs={12} md={8} sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <Paper
+            elevation={3}
+            sx={{
+              flexGrow: 1,
+              display: 'flex',
               flexDirection: 'column',
-              background: `linear-gradient(135deg, ${JP_MORGAN_LIGHT} 0%, #eaf1f8 100%)`,
-              borderRadius: 5,
-              boxShadow: JP_MORGAN_SHADOW,
-              border: `1.5px solid ${JP_MORGAN_GRAY}`,
+              bgcolor: '#f8f9fa',
+              border: `2px solid ${JP_MORGAN_BLUE}`,
+              borderRadius: 2,
             }}
           >
-            <Typography 
-              variant="h4" 
-              gutterBottom 
-              sx={{ 
-                textAlign: 'center',
-                color: JP_MORGAN_BLUE,
-                mb: 3,
-                fontWeight: 700,
-                letterSpacing: '-0.5px',
-                fontFamily: 'Inter, Segoe UI, Arial, sans-serif',
+            {/* Header with Connection Status */}
+            <Box
+              sx={{
+                bgcolor: JP_MORGAN_BLUE,
+                color: 'white',
+                p: 2,
+                borderRadius: '8px 8px 0 0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
               }}
             >
-              AI Loan Assistant
-            </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <SmartToy />
+                <Typography variant="h6" fontWeight="bold">
+                  JP Morgan Loan Assistant
+                </Typography>
+              </Box>
+              
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {/* Connection Status Indicator */}
+                <Tooltip title={connectionStatus.message || (connectionStatus.connected ? 'Connected' : 'Disconnected')}>
+                  <Badge
+                    color={connectionStatus.connected ? 'success' : 'error'}
+                    variant="dot"
+                    sx={{
+                      '& .MuiBadge-badge': {
+                        animation: connectionStatus.connected ? 'none' : 'pulse 2s infinite',
+                      },
+                    }}
+                  >
+                    {connectionStatus.connected ? <SignalWifi4Bar /> : <SignalWifiOff />}
+                  </Badge>
+                </Tooltip>
+                
+                {/* Retry indicator */}
+                {retryCount > 0 && (
+                  <Tooltip title={`Retry attempt: ${retryCount}`}>
+                    <Chip
+                      size="small"
+                      label={retryCount}
+                      color="warning"
+                      sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.2)' }}
+                    />
+                  </Tooltip>
+                )}
+                
+                {/* System Stats Button */}
+                <Tooltip title="System Statistics">
+                  <IconButton
+                    size="small"
+                    onClick={() => {
+                      setShowStats(true);
+                      fetchSystemStats();
+                    }}
+                    sx={{ color: 'white' }}
+                  >
+                    <Assessment />
+                  </IconButton>
+                </Tooltip>
+                
+                {/* Manual Refresh Button */}
+                <Tooltip title="Refresh Connection">
+                  <IconButton
+                    size="small"
+                    onClick={checkConnectionStatus}
+                    sx={{ color: 'white' }}
+                  >
+                    <Refresh />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            </Box>
+            
+            {/* Request Progress Indicator */}
+            {requestInProgress && (
+              <LinearProgress 
+                sx={{ 
+                  bgcolor: 'rgba(0,51,102,0.1)',
+                  '& .MuiLinearProgress-bar': {
+                    bgcolor: JP_MORGAN_BLUE
+                  }
+                }} 
+              />
+            )}
             
             <Box 
               sx={{ 
@@ -465,7 +645,11 @@ const ChatInterface = () => {
                     msg.text === userData.llm_message && (
                       <Zoom in={true}>
                         <Box sx={{ my: 2 }}>
-                          <UserDataCard userData={userData} />
+                          <EnhancedUserDataCard 
+                            userData={userData} 
+                            ofacStatus={userData.ofac_status || 'clear'}
+                            loading={loading && currentStep === 'user_data'}
+                          />
                         </Box>
                       </Zoom>
                     )}
@@ -474,45 +658,9 @@ const ChatInterface = () => {
                     msg.text &&
                     msg.text.toLowerCase().includes('here are your eligibility results') && (
                       <Zoom in={true}>
-                        <Card sx={{ mb: 2, border: '1px solid', borderColor: 'divider' }}>
-                          <CardContent>
-                            <Typography variant="h6" gutterBottom color="primary">
-                              Eligibility Results
-                            </Typography>
-                            <Grid container spacing={3}>
-                              <Grid item xs={6}>
-                                <Typography variant="body2" color="text.secondary">
-                                  Maximum Eligible Amount
-                                </Typography>
-                                <Typography variant="h5" color="primary.main" sx={{ fontWeight: 600 }}>
-                                  ${eligibilityData.eligible_loan_amount.toLocaleString()}
-                                </Typography>
-                              </Grid>
-                              <Grid item xs={6}>
-                                <Typography variant="body2" color="text.secondary">
-                                  Requested Amount
-                                </Typography>
-                                <Typography variant="h5" color="primary.main" sx={{ fontWeight: 600 }}>
-                                  ${eligibilityData.requested_amount.toLocaleString()}
-                                </Typography>
-                              </Grid>
-                              <Grid item xs={12}>
-                                <Chip
-                                  label={eligibilityData.is_eligible ? 'ELIGIBLE' : 'NOT ELIGIBLE'}
-                                  color={eligibilityData.is_eligible ? 'success' : 'error'}
-                                  size="large"
-                                  sx={{ 
-                                    mt: 2,
-                                    px: 2,
-                                    py: 1,
-                                    fontSize: '1rem',
-                                    fontWeight: 600,
-                                  }}
-                                />
-                              </Grid>
-                            </Grid>
-                          </CardContent>
-                        </Card>
+                        <Box sx={{ my: 2 }}>
+                          <EnhancedEligibilityCard eligibilityData={eligibilityData} />
+                        </Box>
                       </Zoom>
                     )}
                 </React.Fragment>
@@ -621,16 +769,141 @@ const ChatInterface = () => {
         </Grid>
       </Grid>
 
-      <Snackbar 
-        open={!!error} 
-        autoHideDuration={6000} 
-        onClose={() => setError(null)}
+      {/* System Stats Dialog */}
+      <Dialog
+        open={showStats}
+        onClose={() => setShowStats(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: JP_MORGAN_BLUE, color: 'white' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Assessment />
+            System Statistics
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ mt: 2 }}>
+          {systemStats ? (
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={6}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      <Speed sx={{ mr: 1, verticalAlign: 'middle' }} />
+                      Performance
+                    </Typography>
+                    <Typography variant="body2">
+                      Active Sessions: {systemStats.session_count || 0}
+                    </Typography>
+                    <Typography variant="body2">
+                      Server Status: {systemStats.status || 'Unknown'}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      <Security sx={{ mr: 1, verticalAlign: 'middle' }} />
+                      Security
+                    </Typography>
+                    <Typography variant="body2">
+                      OFAC Cache: {systemStats.ofac_cache_size || 0} entries
+                    </Typography>
+                    <Typography variant="body2">
+                      Excel Cache: {systemStats.excel_cache_size || 0} entries
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid item xs={12}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      Connection Status
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {connectionStatus.connected ? (
+                        <Chip
+                          icon={<CheckCircle />}
+                          label="Connected"
+                          color="success"
+                          size="small"
+                        />
+                      ) : (
+                        <Chip
+                          icon={<Error />}
+                          label="Disconnected"
+                          color="error"
+                          size="small"
+                        />
+                      )}
+                      <Typography variant="body2">
+                        {connectionStatus.message}
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          ) : (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+              <CircularProgress />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowStats(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Enhanced Error Snackbar */}
+      <Snackbar
+        open={!!error}
+        autoHideDuration={8000}
+        onClose={() => setError('')}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
+        <Alert 
+          onClose={() => setError('')} 
+          severity="error" 
+          sx={{ 
+            width: '100%',
+            '& .MuiAlert-action': {
+              alignItems: 'center'
+            }
+          }}
+          action={
+            !connectionStatus.connected && (
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => {
+                  setError('');
+                  checkConnectionStatus();
+                }}
+                startIcon={<Refresh />}
+              >
+                Retry
+              </Button>
+            )
+          }
+        >
           {error}
         </Alert>
       </Snackbar>
+      
+      {/* CSS for pulse animation */}
+      <style>
+        {`
+          @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+          }
+        `}
+      </style>
     </Container>
   );
 };

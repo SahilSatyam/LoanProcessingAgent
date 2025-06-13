@@ -1,0 +1,31 @@
+2025-06-13 07:34:18,363 - loan_processing - INFO - log_api_request:75 - API Request - GET / - User: unknown
+2025-06-13 07:34:18,369 - loan_processing - INFO - log_api_response:79 - API Response - / - User: unknown - Status: 200 - Time: 0.003s
+2025-06-13 07:34:20,317 - loan_processing - INFO - log_api_request:75 - API Request - GET /favicon.ico - User: unknown
+2025-06-13 07:34:20,320 - loan_processing - INFO - log_api_response:79 - API Response - /favicon.ico - User: unknown - Status: 404 - Time: 0.002s
+2025-06-13 07:37:45,539 - loan_processing - INFO - log_api_request:75 - API Request - POST /greet_user - User: USR004
+2025-06-13 07:37:46,735 - loan_processing.excel_service - INFO - get_user_data:124 - Successfully retrieved user data for: USR004
+2025-06-13 07:37:46,737 - loan_processing - INFO - log_llm_request:86 - LLM Request - User: USR004 - Prompt Length: 81 - Step: greeting
+2025-06-13 07:37:54,305 - loan_processing - INFO - log_llm_response:94 - LLM Response - User: USR004 - Status: SUCCESS - Response Length: 299 - Time: 7.568s
+2025-06-13 07:37:54,310 - loan_processing.api - INFO - greet_user:118 - User greeting completed for: USR004
+2025-06-13 07:37:54,316 - loan_processing - INFO - log_api_response:79 - API Response - /greet_user - User: USR004 - Status: 200 - Time: 8.775s
+2025-06-13 07:38:23,655 - loan_processing - INFO - log_api_request:75 - API Request - POST /fetch_user_data - User: USR004
+2025-06-13 07:38:23,823 - loan_processing.excel_service - INFO - get_user_data:124 - Successfully retrieved user data for: USR004
+2025-06-13 07:38:24,326 - loan_processing - INFO - log_ofac_check:102 - OFAC Check - User: USR004 - Name: Micheal Cunningham - Result: PASSED - Status: OFAC sanctions check passed - no matches found
+2025-06-13 07:38:24,328 - loan_processing.ofac_service - INFO - check_sanctions:110 - OFAC check completed in 0.503s for: Micheal Cunningham
+2025-06-13 07:38:24,329 - loan_processing - INFO - log_llm_request:86 - LLM Request - User: USR004 - Prompt Length: 241 - Step: data_verification
+2025-06-13 07:38:31,249 - loan_processing - INFO - log_llm_response:94 - LLM Response - User: USR004 - Status: SUCCESS - Response Length: 304 - Time: 6.920s
+2025-06-13 07:38:31,251 - loan_processing.api - INFO - fetch_user_data:188 - User data fetched and OFAC check passed for: USR004
+2025-06-13 07:38:31,255 - loan_processing - INFO - log_api_response:79 - API Response - /fetch_user_data - User: USR004 - Status: 200 - Time: 7.600s
+2025-06-13 07:39:00,387 - loan_processing - INFO - log_api_request:75 - API Request - POST /ask_loan_amount - User: USR004
+2025-06-13 07:39:00,394 - loan_processing - INFO - log_llm_request:86 - LLM Request - User: USR004 - Prompt Length: 47 - Step: loan_amount_input
+2025-06-13 07:39:12,604 - loan_processing - INFO - log_llm_response:94 - LLM Response - User: USR004 - Status: SUCCESS - Response Length: 436 - Time: 12.210s
+2025-06-13 07:39:12,617 - loan_processing - INFO - log_api_response:79 - API Response - /ask_loan_amount - User: USR004 - Status: 200 - Time: 12.229s
+2025-06-13 07:39:27,846 - loan_processing - INFO - log_api_request:75 - API Request - POST /calculate_eligibility - User: USR004
+2025-06-13 07:39:27,879 - loan_processing - INFO - log_loan_calculation:111 - Loan Calculation - User: USR004 - Requested: $50,000.00 - Eligible: $121,880.00 - Result: ELIGIBLE
+2025-06-13 07:39:27,882 - loan_processing.api - INFO - calculate_eligibility:358 - Loan eligibility calculated for USR004: True
+2025-06-13 07:39:27,889 - loan_processing - INFO - log_api_response:79 - API Response - /calculate_eligibility - User: USR004 - Status: 200 - Time: 0.040s
+2025-06-13 07:40:09,563 - loan_processing - INFO - log_api_request:75 - API Request - GET /stats - User: unknown
+2025-06-13 07:40:09,643 - loan_processing - INFO - log_api_response:79 - API Response - /stats - User: unknown - Status: 200 - Time: 0.079s
+2025-06-13 07:40:29,360 - loan_processing - INFO - log_api_request:75 - API Request - GET /download-loan-agreement - User: unknown
+2025-06-13 07:40:29,362 - loan_processing.api - INFO - download_loan_agreement:450 - Loan agreement downloaded from: data/Format-Loan Agreement.doc
+2025-06-13 07:40:29,375 - loan_processing - INFO - log_api_response:79 - API Response - /download-loan-agreement - User: unknown - Status: 200 - Time: 0.014s
