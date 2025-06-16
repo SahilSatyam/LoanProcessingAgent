@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     )
     
     # LLM Configuration
-    deepseek_api_key: str = Field(default="sk-d932e3fdf99e443e9e16fac3c51d1a49", env="DEEPSEEK_API_KEY")
+    deepseek_api_key: str = Field(default="sk-<add your key>", env="DEEPSEEK_API_KEY")
     deepseek_api_url: str = Field(
         default="https://api.deepseek.com/v1/chat/completions",
         env="DEEPSEEK_API_URL"
